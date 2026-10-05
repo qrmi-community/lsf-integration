@@ -1,16 +1,18 @@
-#!/usr/bin/env python3
+#!/opt/lsfce/pyenv/bin/python3
 import sys
 import os
 import subprocess
 import json
-from qrmi import QuantumResource, ResourceType, ResourceProvider
+from qrmi import QuantumResource, ResourceType, ResourceProvider, ResourceStatusCode
 
 RES_TYPE_MAP = {
-    "direct-access": ResourceType.IBMQiskitRuntimeService,
-    "quantum-system": ResourceType.IBMQiskitRuntimeService,
+    "quantum-system": ResourceType.IBMQuantumSystem,
     "qiskit-runtime-service": ResourceType.IBMQiskitRuntimeService,
     "pasqal-cloud": ResourceType.PasqalCloud,
     "pasqal-local": ResourceType.PasqalLocal,
+    "alice-bob-felis": ResourceType.AliceBobFelis,
+    "iqm-server": ResourceType.IQMServer,
+    # "oqtopus": ResourceType.OQTOPUS,
 }
 
 # Delimiter for list string
@@ -68,7 +70,7 @@ resources = os.getenv("QRMI_QPU_RESOURCES")
 job_args = sys.argv[1:]
 if resources:
     debug = os.getenv("LSF_QRMI_DEBUG")
-    cfg_path = os.path.join(os.getenv("LSF_ENVDIR"), "qrmi_config.json")
+    cfg_path = os.path.join(os.getenv("HOME"), "qrmi_config.json")
     with open(cfg_path, "r", encoding="utf8") as f:
         cfg_json = json.load(f)
         cfg_by_name = {r["name"]: r for r in cfg_json["resources"]}
@@ -93,7 +95,12 @@ if resources:
                 try:
                     process_cfg(name, cfg)
                     qrmi = QuantumResource(name, RES_TYPE_MAP.get(cfg["type"]))
-                    if qrmi.is_accessible() is False:
+                    print_debug(f"resource_type = {qrmi.resource_type()}, resource_id={qrmi.resource_id()}")
+                    status = qrmi.status().to_dict()
+                    print_debug(f"status = {json.dumps(status, indent=2)}")
+                    # The quantum resource cannot accept jobs due to maintenance,
+                    # calibration, or other operational activities.
+                    if qrmi.status().status != ResourceStatusCode.Online:
                         print_debug("{name} is inaccessible. Ignored.")
                         continue
                     acquire_token(qrmi)

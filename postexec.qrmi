@@ -1,15 +1,17 @@
-#!/usr/bin/env python3
+#!/opt/lsfce/pyenv/bin/python3
 import sys
 import os
 from dotenv import load_dotenv
 from qrmi import QuantumResource, ResourceType
 
 RES_TYPE_MAP = {
-    "direct-access": ResourceType.IBMQiskitRuntimeService,
-    "quantum-system": ResourceType.IBMQiskitRuntimeService,
+    "quantum-system": ResourceType.IBMQuantumSystem,
     "qiskit-runtime-service": ResourceType.IBMQiskitRuntimeService,
     "pasqal-cloud": ResourceType.PasqalCloud,
     "pasqal-local": ResourceType.PasqalLocal,
+    "alice-bob-felis": ResourceType.AliceBobFelis,
+    "iqm-server": ResourceType.IQMServer,
+    # "oqtopus": ResourceType.OQTOPUS,
 }
 
 # Print message to file, stdout/stderr not available to postexec
