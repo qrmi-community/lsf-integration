@@ -1,0 +1,129 @@
+services:
+  # Ephemeral key generator service that provisions the shared SSH and home volumes
+  ssh-generator:
+    image: alpine:latest
+    container_name: lsf_ssh_init
+    command: >
+      sh -c "apk add --no-cache openssh-client &&
+             # 1. Initialize Root SSH Keys
+             if [ ! -f /shared_ssh/id_ed25519 ]; then
+               ssh-keygen -t ed25519 -N '' -f /shared_ssh/id_ed25519 -C 'lsf-cluster-root-key' &&
+               cp /shared_ssh/id_ed25519.pub /shared_ssh/authorized_keys &&
+               chmod 700 /shared_ssh &&
+               chmod 600 /shared_ssh/*;
+             fi &&
+             
+             # 2. Initialize lsfadmin Shared Home & SSH (Fix ownership to UID/GID 1001)
+             mkdir -p /lsfadmin_home/.ssh &&
+             if [ ! -f /lsfadmin_home/.ssh/id_ed25519 ]; then
+               ssh-keygen -t ed25519 -N '' -f /lsfadmin_home/.ssh/id_ed25519 -C 'lsfadmin-key' &&
+               cp /lsfadmin_home/.ssh/id_ed25519.pub /lsfadmin_home/.ssh/authorized_keys;
+             fi &&
+             chown -R 1001:1001 /lsfadmin_home &&
+             chmod 750 /lsfadmin_home &&
+             chmod 700 /lsfadmin_home/.ssh &&
+             chmod 600 /lsfadmin_home/.ssh/* &&
+
+             # 3. Initialize lsfuser Shared Home & SSH (Fix ownership to UID/GID 1002)
+             mkdir -p /lsfuser_home/.ssh &&
+             if [ ! -f /lsfuser_home/.ssh/id_ed25519 ]; then
+               ssh-keygen -t ed25519 -N '' -f /lsfuser_home/.ssh/id_ed25519 -C 'lsfuser-key' &&
+               cp /lsfuser_home/.ssh/id_ed25519.pub /lsfuser_home/.ssh/authorized_keys;
+             fi &&
+             chown -R 1002:1002 /lsfuser_home &&
+             chmod 750 /lsfuser_home &&
+             chmod 700 /lsfuser_home/.ssh &&
+             chmod 600 /lsfuser_home/.ssh/*"
+    volumes:
+      - ssh_keys:/shared_ssh
+      - lsfadmin_home:/lsfadmin_home
+      - lsfuser_home:/lsfuser_home
+
+  lsf-head:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lsf-head
+    hostname: lsf-head
+    privileged: true
+    ports:
+      - "2222:22"
+    environment:
+      NODE_ROLE: head
+      LSF_CLUSTER_NAME: cluster1
+    depends_on:
+      ssh-generator:
+        condition: service_completed_successfully # Ensures keys and homes exist before starting
+    volumes:
+      - lsf_install:/opt/lsfce
+      - shared_fs:/shared
+      - ssh_keys:/root/.ssh:ro # Mounts keys read-only to root's home directory
+      - lsfadmin_home:/home/lsfadmin
+      - lsfuser_home:/home/lsfuser
+    networks:
+      lsfnet:
+        ipv4_address: 10.10.10.10
+
+  compute01:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: compute01
+    hostname: compute01
+    privileged: true
+    environment:
+      NODE_ROLE: compute
+      LSF_CLUSTER_NAME: cluster1
+    depends_on:
+      ssh-generator:
+        condition: service_completed_successfully
+      lsf-head:
+        condition: service_started
+    volumes:
+      - lsf_install:/opt/lsfce
+      - shared_fs:/shared
+      - ssh_keys:/root/.ssh:ro
+      - lsfadmin_home:/home/lsfadmin
+      - lsfuser_home:/home/lsfuser
+    networks:
+      lsfnet:
+        ipv4_address: 10.10.10.11
+
+  compute02:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: compute02
+    hostname: compute02
+    privileged: true
+    environment:
+      NODE_ROLE: compute
+      LSF_CLUSTER_NAME: cluster1
+    depends_on:
+      ssh-generator:
+        condition: service_completed_successfully
+      lsf-head:
+        condition: service_started
+    volumes:
+      - lsf_install:/opt/lsfce
+      - shared_fs:/shared
+      - ssh_keys:/root/.ssh:ro
+      - lsfadmin_home:/home/lsfadmin
+      - lsfuser_home:/home/lsfuser
+    networks:
+      lsfnet:
+        ipv4_address: 10.10.10.12
+
+volumes:
+  lsf_install:
+  shared_fs:
+  ssh_keys:
+  lsfadmin_home:  # Shared volume for lsfadmin
+  lsfuser_home:   # Shared volume for lsfuser
+
+networks:
+  lsfnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.10.0/24
