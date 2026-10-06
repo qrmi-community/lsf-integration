@@ -13,6 +13,7 @@ if [ "${ROLE}" = "head" ] && [ ! -f /opt/lsfce/.cluster_ready ]; then
     echo "Installing and configuring LSF..."
     /usr/local/bin/install-lsf.sh
     /usr/local/bin/configure-lsf.sh
+    /usr/local/bin/configure-user.sh
     touch /opt/lsfce/.cluster_ready
     echo "Cluster configuration complete"
 fi
