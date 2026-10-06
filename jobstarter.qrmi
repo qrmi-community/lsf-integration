@@ -91,6 +91,9 @@ if resources:
                 is_dynamic = False
             print_debug(f"From qrmi_config.json, is_dynamic = {is_dynamic}")
 
+            # Disable resource discovery (still in beta)
+            is_dynamic = False
+
             if is_dynamic is False:
                 try:
                     process_cfg(name, cfg)

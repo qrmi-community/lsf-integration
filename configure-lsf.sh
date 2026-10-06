@@ -34,13 +34,3 @@ pip install requests dotenv qrmi
 
 echo "$0: Set lsfadmin as the owner"
 chown -R lsfadmin:lsfadmin /opt/lsfce
-
-echo "$0: Set up lsfuser"
-cp /distribution/qrmi_config.json.example /home/lsfuser
-cp -r /distribution/examples /home/lsfuser
-chmod 600 /home/lsfuser/qrmi_config.json.example
-chown -R lsfuser:lsfuser /home/lsfuser
-
-echo "$0: Configure lsfadmin and lsfuser to source profile.lsf in .bashrc"
-echo 'if [ -f /opt/lsfce/conf/profile.lsf ]; then . /opt/lsfce/conf/profile.lsf; fi' >> /home/lsfadmin/.bashrc
-echo 'if [ -f /opt/lsfce/conf/profile.lsf ]; then . /opt/lsfce/conf/profile.lsf; fi' >> /home/lsfuser/.bashrc
