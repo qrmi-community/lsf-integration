@@ -6,10 +6,11 @@ CONFDIR="/opt/lsfce/conf"
 
 echo "$0: Set up lsfuser examples, venv"
 cp -r /distribution/examples /home/lsfuser
+chmod +x /home/lsfuser/examples/*.sh
 python3 -m venv /home/lsfuser/pyenv
 source /home/lsfuser/pyenv/bin/activate
 pip install --upgrade pip
-pip install dotenv numpy requests qrmi numpy qiskit qiskit_ibm_runtime
+pip install dotenv numpy requests "${LSF_QRMI_PACKAGE:-qrmi}" qiskit qiskit_ibm_runtime
 chown -R lsfuser:lsfuser /home/lsfuser
 
 echo "$0: Configure lsfadmin and lsfuser to source profile.lsf in .bashrc"

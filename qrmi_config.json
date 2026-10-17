@@ -1,6 +1,18 @@
 {
   "resources": [
     {
+      "name": "EMU_FREE",
+      "type": "pasqal-cloud",
+      "environment": {}
+    },
+    {
+      "name": "PASQAL_LOCAL",
+      "type": "pasqal-local",
+      "environment": {
+        "QRMI_WARDEN_URL": "http://warden:4207"
+      }
+    },
+    {
       "name": "ibm_marrakesh",
       "type": "qiskit-runtime-service",
       "environment": {

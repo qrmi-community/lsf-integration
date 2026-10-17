@@ -2,6 +2,9 @@ FROM ubuntu:24.04
 
 ARG LSF_TAR
 ENV LSF_TAR=${LSF_TAR}
+# Not QRMI_*: the jobstarter forwards QRMI_* variables to QRMI as resource configuration
+ARG LSF_QRMI_PACKAGE=qrmi
+ENV LSF_QRMI_PACKAGE=${LSF_QRMI_PACKAGE}
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -21,12 +24,14 @@ RUN apt-get update && \
         python3 \
         python3-pip \
         python3-venv \
+        munge \
         default-jre \
         ed \
         less \
         mpich \
         libmpich-dev && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    rm -f /etc/munge/munge.key
 
 RUN mkdir -p /var/run/sshd
 RUN ssh-keygen -A
@@ -61,6 +66,7 @@ RUN chmod +x \
     /usr/local/bin/configure-user.sh
 
 COPY jobstarter.qrmi /distribution
+COPY pasqal_local.py /distribution
 COPY qrmi_config.json /distribution
 
 COPY examples/ /distribution/examples/

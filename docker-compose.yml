@@ -60,6 +60,7 @@ services:
       - ssh_keys:/root/.ssh:ro # Mounts keys read-only to root's home directory
       - lsfadmin_home:/home/lsfadmin
       - lsfuser_home:/home/lsfuser
+      - munge_config:/etc/munge
     networks:
       lsfnet:
         ipv4_address: 10.10.10.10
@@ -85,6 +86,7 @@ services:
       - ssh_keys:/root/.ssh:ro
       - lsfadmin_home:/home/lsfadmin
       - lsfuser_home:/home/lsfuser
+      - munge_config:/etc/munge
     networks:
       lsfnet:
         ipv4_address: 10.10.10.11
@@ -110,11 +112,13 @@ services:
       - ssh_keys:/root/.ssh:ro
       - lsfadmin_home:/home/lsfadmin
       - lsfuser_home:/home/lsfuser
+      - munge_config:/etc/munge
     networks:
       lsfnet:
         ipv4_address: 10.10.10.12
 
 volumes:
+  munge_config:
   lsf_install:
   shared_fs:
   ssh_keys:

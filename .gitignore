@@ -1,5 +1,8 @@
 # Holds API keys
 .env
+lsfsce*.tar.Z
+__pycache__/
+*.pyc
 
 # Prerequisites
 *.d
