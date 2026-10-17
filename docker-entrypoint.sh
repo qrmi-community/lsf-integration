@@ -34,9 +34,13 @@ fi
 
 # Start LSF services
 echo "Starting LSF daemons..."
-lsadmin limstartup
-lsadmin resstartup
-badmin hstartup
+# Start the daemons directly: lsadmin/badmin start them through bctrld, which
+# refuses ("Permission denied") when root is inside a user namespace, as in
+# rootless Podman. Running the daemons as root works with and without user
+# namespaces.
+"${LSF_SERVERDIR}/lim"
+"${LSF_SERVERDIR}/res"
+"${LSF_SERVERDIR}/sbatchd"
 
 # Ensure this node is alive
 until lsload >/dev/null 2>&1; do sleep 2; done

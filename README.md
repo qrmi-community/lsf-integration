@@ -27,4 +27,6 @@ QRMI_QPU_RESOURCES=ibm_marrakesh QRMI_IBM_QRS_IAM_APIKEY=... LSF_QRMI_DEBUG=1 bs
 
 ## Links
 
+[Setup with Docker, Podman (rootful or rootless) and Windows/WSL2](SETUP.md)
+
 [IBM LFS Community Edition (free after a simple registration process)](https://early-access.ibm.com/software/support/trial/cst/programwebsite.wss?siteId=680&h=&tabId=&_gl=1*18pgo3p*_ga*ODgwNjAzMzMzLjE3OTEyOTM1ODI.*_ga_FYECCCS21D*czE3OTEyOTM1ODEkbzEkZzEkdDE3OTEyOTM2NjUkajQ4JGwwJGgw)
