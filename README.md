@@ -104,7 +104,7 @@ Two MPI ranks should run on `compute01` and two on `compute02`.
 
 ### Installation and Configuration Scripts
 
-`docker-entrypoint.sh` orchestrates the bring up of the containers which share `/opt/lsfce`, `/shared`, `/home/lsfadmin`, and `/home/lsfuser`.
+`docker-entrypoint.sh` orchestrates the bring up of the containers which share `/opt` (LSF and MPICH), `/home`, and `/shared`. `/shared` is bind-mounted from `./shared` next to `docker-compose.yml`, which Compose creates on first start.
 
 `install-lsf.sh` installs LSF in `/opt/lsfce`. The script relies on `LSF_TAR` to determine which LSF download to use (`lsfsce10.2.0.15-armv8.tar.Z` or `lsfsce10.2.0.15-x86_64.tar.Z`).
 
@@ -213,32 +213,48 @@ without printing credentials or acquisition tokens.
 ### Pasqal Local
 
 The configuration includes `PASQAL_LOCAL` with `QRMI_WARDEN_URL=http://warden:4207`.
-Replace this with the Warden URL reachable from the compute nodes. The pre-hook
+Replace this with the Warden URL reachable from the compute nodes.
+
+If Warden runs in a container on another container network, connect the LSF
+containers to that network. List the networks of the Warden container (here
+`warden`; use the name shown by `docker ps`):
+
+```bash
+docker inspect warden --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}'
+```
+
+Then connect the LSF containers to that network and check the connection:
+
+```bash
+for c in lsf-head compute01 compute02; do docker network connect <network> $c; done
+docker exec compute01 curl -s http://warden:4207/accessible
+```
+
+With Podman, use `podman` instead of `docker`. The Warden container name then
+resolves from the LSF nodes, so `QRMI_WARDEN_URL` can use it. Recreating the
+containers (`docker compose down` and `up`) removes the connection; run the
+loop again. The pre-hook
 maps LSF's `LSB_JOB_EXECUSER` to the Unix UID and `LSB_JOBID` to `QRMI_JOB_ID`, and
 includes `LSB_JOBINDEX` for array jobs as `job_id[index]`. The jobstarter exports
 this identity and the prepared session to the application.
 
 Warden requires MUNGE authentication and administrator privileges to create and
-revoke sessions. A stock QRMI wheel without the `munge` feature is insufficient;
-both the hook and application need a MUNGE-enabled QRMI build. This setup was
-tested with QRMI 0.26.3. From a QRMI source release, with Rust, Maturin and the
-MUNGE development library installed, build:
+revoke sessions. QRMI 0.26.1 and later load the MUNGE library at runtime, so the
+PyPI `qrmi` package installed by default works with the MUNGE daemon in the
+containers. This setup was tested with QRMI 0.26.3.
+
+To use another QRMI build, for an existing container cluster, copy the wheel into
+`./shared` next to `docker-compose.yml`, where all nodes see it as `/shared`:
 
 ```bash
-maturin build --release --features pyo3,pyo3/abi3,munge
-```
-
-Use the resulting wheel in both environments. For an existing container cluster:
-
-```bash
-docker cp /path/to/qrmi-wheel.whl lsf-head:/shared/qrmi-wheel.whl
+cp /path/to/qrmi-wheel.whl shared/
 docker exec lsf-head /opt/lsfce/pyenv/bin/pip install --force-reinstall /shared/qrmi-wheel.whl
 docker exec lsf-head /home/lsfuser/pyenv/bin/pip install --force-reinstall /shared/qrmi-wheel.whl
 ```
 
 Replace `qrmi-wheel.whl` with the wheel's full filename. For a fresh installation,
 the build argument `LSF_QRMI_PACKAGE` can specify a wheel URL or a wheel path visible
-inside the container. The default is the PyPI `qrmi` package for Cloud/IBM use.
+inside the container, such as `/shared/qrmi-wheel.whl`.
 
 The containers run MUNGE with a key generated at first startup and shared through
 the `munge_config` volume. Configure Warden's MUNGE daemon with the same key, or

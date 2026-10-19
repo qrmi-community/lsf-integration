@@ -13,13 +13,13 @@ printf 'LSF_ADMINS=lsfadmin\nLSB_PRE_POST_EXEC_USER=root\n' > /etc/lsf.sudoers
 chmod 600 /etc/lsf.sudoers
 install -d -m 711 -o root -g root /run/lsf-qrmi
 
-#if [ "${ROLE}" = "head" ] && [ ! -f /etc/munge/munge.key ]; then
-#    mungekey --create
-#fi
-#until [ -f /etc/munge/munge.key ]; do sleep 2; done
-#chown munge:munge /etc/munge/munge.key
-#chmod 400 /etc/munge/munge.key
-#service munge start
+if [ "${ROLE}" = "head" ] && [ ! -f /etc/munge/munge.key ]; then
+    mungekey --create
+fi
+until [ -f /etc/munge/munge.key ]; do sleep 2; done
+chown munge:munge /etc/munge/munge.key
+chmod 400 /etc/munge/munge.key
+service munge start
 
 # Cluster installation on head node
 if [ "${ROLE}" = "head" ] && [ ! -f /opt/lsfce/.cluster_ready ]; then

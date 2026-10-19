@@ -48,7 +48,7 @@ def print_error(message):
 
 # Set environment variable for quantum job (then used by QRMI)
 def set_env(name, value):
-    print_debug(f"Setting {name} = {value}")
+    print_debug(f"Setting {name}")
     os.environ[name] = value
 
 # Build the QRMI configuration map for a resource.
@@ -68,41 +68,34 @@ def set_env(name, value):
 #      bsub -env option. These have the highest precedence and
 #      override all values from configuration files.
 #
-# The resulting configuration is exported as resource-scoped
-# environment variables (<resource_name>_<key>) and returned
-# as an in-memory configuration map.
+# The resulting configuration is exported as environment variables,
+# QRMI_* keys resource-scoped (<resource_name>_<key>) except the job
+# identity, and returned as an in-memory configuration map.
+#
+# Pasqal Cloud also receives HOME and PASQAL_* credentials so QRMI can
+# read ~/.pasqal/config. Pasqal Local uses the session prepared by the
+# root pre-hook instead and returns None when the resource was offline.
 def build_config_map(name, cfg, cfg_priv):
-    config_map = {}
-
-    print_debug("From LSF_ENVDIR/qrmi_config.json...")
-    for key, value in cfg.get("environment", {}).items():
-        env_name = f"{name}_{key}"
-        config_map[key] = value
+    if cfg["type"] == "pasqal-local":
+        session = load_session(name)
+        if session is None:
+            return None
+        config_map = session["config"]
+        set_env(f"{name}_QRMI_JOB_ACQUISITION_TOKEN", session["token"])
+    else:
+        config_map = {**cfg.get("environment", {}), **cfg_priv.get("environment", {}),
+                      **{key: value for key, value in os.environ.items() if key.startswith("QRMI_")}}
+    if cfg["type"] == "pasqal-cloud":
+        for key in ("HOME", "PASQAL_CONFIG_ROOT", "PASQAL_USERNAME", "PASQAL_PASSWORD"):
+            if key in os.environ:
+                config_map[key] = os.environ[key]
+    for key, value in config_map.items():
+        env_name = (
+            f"{name}_{key}" if key.startswith("QRMI_")
+            and key not in ("QRMI_JOB_UID", "QRMI_JOB_ID") else key
+        )
         set_env(env_name, value)
-    print_debug("From HOME/.config/qrmi_config.json...")
-    for key, value in cfg_priv.get("environment", {}).items():
-        env_name = f"{name}_{key}"
-        config_map[key] = value
-        set_env(env_name, value)
-    print_debug("From user environment...")
-    for key, value in os.environ.items():
-        if key.startswith("QRMI_"):
-            env_name = f"{name}_{key}"
-            config_map[key] = value
-            set_env(env_name, value)
     return config_map
-
-# Do we need this for both public and private cases?
-#    if cfg["type"] == "pasqal-cloud":
-#        for key in ("HOME", "PASQAL_CONFIG_ROOT", "PASQAL_USERNAME", "PASQAL_PASSWORD"):
-#            if key in os.environ:
-#                config_map[key] = os.environ[key]
-#    if cfg["type"] == "pasqal-local":
-#        session = load_session(name)
-#        if session is None:
-#            return None
-#        config_map = session["config"]
-#        set_env(f"{name}_QRMI_JOB_ACQUISITION_TOKEN", session["token"])
 
 # Get bearer token and make it available to the job
 def acquire_token(qrmi):
@@ -130,6 +123,7 @@ try:
         except FileNotFoundError:
             cfg_priv_by_name = {}
 
+        managed_resources = {}
         for name in resources.split(QRMI_LIST_DELIMITER):
             print_debug(f"Checking {name}")
             name = name.strip()
@@ -139,7 +133,13 @@ try:
             cfg_priv = cfg_priv_by_name.get(name, {})
 
             try:
-                qrmi = QuantumResource.from_config(name, RES_TYPE_MAP[cfg["type"]], build_config_map(name, cfg, cfg_priv))
+                config_map = build_config_map(name, cfg, cfg_priv)
+                if cfg["type"] == "pasqal-local":
+                    # The root post-hook releases Local sessions.
+                    if config_map is not None:
+                        managed_resources[name] = cfg["type"]
+                    continue
+                qrmi = QuantumResource.from_config(name, RES_TYPE_MAP[cfg["type"]], config_map)
                 print_debug(f"resource_type = {qrmi.resource_type()}, resource_id={qrmi.resource_id()}")
                 status = qrmi.status()
                 print_debug(f"status = {json.dumps(status.to_dict(), indent=2)}")
@@ -152,11 +152,12 @@ try:
                     print_debug(f"{name} is inaccessible. Ignored.")
                     continue
                 acquire_token(qrmi)
-                acquired_resources[name] = { "resource": qrmi, "type": cfg["type"] }
+                acquired_resources[name] = qrmi
+                managed_resources[name] = cfg["type"]
             except RuntimeError as re:
-                print(f"Failed to process request in QRMI for {name}: {re}")
+                print_error(f"Failed to process request in QRMI for {name}: {re}")
 
-        if len(acquired_resources) == 0:
+        if len(managed_resources) == 0:
             print(f"No specified quantum resources ({resources}) are available", file=sys.stderr)
             raise SystemExit(99)
 
@@ -176,17 +177,17 @@ try:
         # QRMI_LIST_DELIMITER: Delimiter used to encode list-valued
         # QRMI environment variables. Consumers should use this value
         # rather than assuming a fixed separator character.
-        set_env("QRMI_JOB_QPU_RESOURCES", QRMI_LIST_DELIMITER.join(acquired_resources.keys()))
-        set_env("QRMI_JOB_QPU_TYPES", QRMI_LIST_DELIMITER.join(r["type"] for r in acquired_resources.values()))
+        set_env("QRMI_JOB_QPU_RESOURCES", QRMI_LIST_DELIMITER.join(managed_resources.keys()))
+        set_env("QRMI_JOB_QPU_TYPES", QRMI_LIST_DELIMITER.join(managed_resources.values()))
         set_env("QRMI_LIST_DELIMITER", QRMI_LIST_DELIMITER)
 
-        # Launch the user job. Quantum job is expected to acquire QRMI
-        # resources and store acquisition tokens through environment
-        # variables, eg, # <RESOURCE_NAME>_QRMI_JOB_ACQUISITION_TOKEN.
-        # Tokens are required to release the resource when the job
-        # completes.
-        result = subprocess.run(job_args)
-        return_code = result.returncode
+    # Launch the user job. Quantum job is expected to acquire QRMI
+    # resources and store acquisition tokens through environment
+    # variables, eg, # <RESOURCE_NAME>_QRMI_JOB_ACQUISITION_TOKEN.
+    # Tokens are required to release the resource when the job
+    # completes.
+    result = subprocess.run(job_args)
+    return_code = result.returncode
 finally:
     if resources:
         # Always attempt resource cleanup, regardless of job success,
@@ -195,7 +196,7 @@ finally:
         # Note that this cleanup executes only while the launcher
         # process remains alive. It cannot run after an external
         # SIGKILL.
-        for name, entry in acquired_resources.items():
+        for name, qrmi in acquired_resources.items():
             # Token generated during acquisition and propagated
             # through the job environment.
             token = os.getenv(f"{name}_QRMI_JOB_ACQUISITION_TOKEN")
@@ -206,7 +207,7 @@ finally:
                 print(f"Missing token for {name}", file=sys.stderr)
                 continue
             try:
-                entry["resource"].release(token)
+                qrmi.release(token)
                 print_debug(f"{name} released")
             except RuntimeError as re:
 		# Release failures are logged and do not prevent

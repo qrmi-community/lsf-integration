@@ -24,12 +24,12 @@ RUN apt-get update && \
         python3 \
         python3-pip \
         python3-venv \
+        munge \
         default-jre \
         ed \
         less && \
-    rm -rf /var/lib/apt/lists/*
-#        munge \
-#    rm -f /etc/munge/munge.key
+    rm -rf /var/lib/apt/lists/* && \
+    rm -f /etc/munge/munge.key
 
 RUN mkdir -p /var/run/sshd
 RUN ssh-keygen -A

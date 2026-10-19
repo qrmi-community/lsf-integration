@@ -1,6 +1,8 @@
 # Holds API keys
 .env
 lsfsce*.tar.Z
+# Bind-mounted as /shared in the containers
+shared/
 __pycache__/
 *.pyc
 

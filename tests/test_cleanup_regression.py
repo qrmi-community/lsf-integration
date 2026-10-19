@@ -12,7 +12,8 @@ JOBSTARTER = Path(__file__).resolve().parents[1] / "jobstarter.qrmi"
 
 class CleanupRegressionTests(unittest.TestCase):
     def run_scenario(self, scenario, app_exit=0, resource_types=None, environment=None,
-                     app_code=None, config_environment=None, pasqal_example=False):
+                     app_code=None, config_environment=None, pasqal_example=False,
+                     private_environment=None):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
 
@@ -30,6 +31,10 @@ class CleanupRegressionTests(unittest.TestCase):
                 ]
             }
             (tmp / "qrmi_config.json").write_text(json.dumps(config))
+            if private_environment:
+                (tmp / ".config").mkdir()
+                (tmp / ".config/qrmi_config.json").write_text(json.dumps({"resources": [
+                    {"name": "resource_a", "environment": private_environment}]}))
 
             mock_module = tmp / "qrmi.py"
             mock_module.write_text("""
@@ -152,6 +157,7 @@ class QuantumResource:
             env = os.environ.copy()
             env.update({
                 "PYTHONPATH": str(tmp),
+                "HOME": str(tmp),
                 "LSF_ENVDIR": str(tmp),
                 "QRMI_QPU_RESOURCES": "resource_a,resource_b",
                 "LSF_QRMI_DEBUG": "1",
@@ -348,6 +354,31 @@ print(json.dumps(config))
         for value in ("private-user", "private-password", "private-token", "token-resource_a"):
             self.assertNotIn(value, result.stderr)
         self.assertEqual(events, ["acquire:resource_a", "release:resource_a"])
+
+    def test_private_config_precedence(self):
+        """Override site configuration with the user's file, and that with the environment."""
+        result, events = self.run_scenario(
+            "normal", resource_types=("pasqal-cloud",),
+            config_environment={"QRMI_PASQAL_CLOUD_PROJECT_ID": "site-project",
+                                "QRMI_PASQAL_CLOUD_AUTH_ENDPOINT": "site-endpoint"},
+            private_environment={"QRMI_PASQAL_CLOUD_PROJECT_ID": "user-project",
+                                 "QRMI_PASQAL_CLOUD_AUTH_ENDPOINT": "user-endpoint"},
+            environment={"QRMI_PASQAL_CLOUD_AUTH_ENDPOINT": "env-endpoint"},
+            app_code="""
+import os
+assert os.environ["resource_a_QRMI_PASQAL_CLOUD_PROJECT_ID"] == "user-project"
+assert os.environ["resource_a_QRMI_PASQAL_CLOUD_AUTH_ENDPOINT"] == "env-endpoint"
+""",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(events, ["acquire:resource_a", "release:resource_a"])
+
+    def test_classical_job(self):
+        """Run a job without quantum resources and propagate its exit status."""
+        result, events = self.run_scenario("normal", app_exit=3,
+                                           environment={"QRMI_QPU_RESOURCES": ""})
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertEqual(events, [])
 
     def test_mixed_ibm_pasqal_cleanup(self):
         """Release IBM and Pasqal resources after an application failure."""
